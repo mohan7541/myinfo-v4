@@ -1,0 +1,169 @@
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Sample Application</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+		<link href="https://fonts.googleapis.com/css?family=Merriweather:300,400%7CPoppins:400,500,600" rel="stylesheet">
+	
+		<script src="jquery/jquery.min.js"></script>
+		<script src="jquery/purl.js"></script>
+		<script src="tether/js/tether.min.js"></script>
+		<script>
+		// ---START---SETUP VARIABLES---
+		var scrollToAppForm = false;
+		var authApiUrl='https://test.api.myinfo.gov.sg/com/v4/authorize'; // URL for authorize API
+		var clientId = 'STG2-MYINFO-SELF-TEST'; // your app_id/client_id provided to you during onboarding
+		var redirectUrl = 'http://localhost:3001/callback'; // callback url for your application
+		var purpose_id='demonstration'; // The purpose of your data retrieval
+		var scope = 'uinfin name sex race nationality dob email mobileno regadd housingtype hdbtype marital edulevel noa-basic ownerprivate cpfcontributions cpfbalances'; // the attributes you are retrieving for your application to fill the form
+		var method = "S256"
+		var securityEnable; // the auth level, determines the flow
+		var clientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+		// ---END---SETUP VARIABLES---
+
+		callAuthorizeApi();
+
+		// ---START---AUTH API---
+		function callAuthorizeApi() {
+			//Call backend server to generate code challenge 
+			$.ajax({
+				url: "/generateCodeChallenge",
+				data: {},
+				type: "POST",
+				success: function (result) {
+					console.log(result);
+					//Redirect to authorize url after generating code challenge
+					var authorizeUrl = authApiUrl + "?client_id=" + clientId +
+						"&scope=" + scope +
+						"&purpose_id=" + purpose_id +
+						"&code_challenge=" + result.codeChallenge +
+						"&code_challenge_method=" + method +
+						"&redirect_uri=" + redirectUrl;
+
+					window.location = authorizeUrl;
+				},
+				error: function (result) {
+					alert("ERROR:" + JSON.stringify(result.responseJSON.error));
+				}
+			});
+		}
+		// ---END---AUTH API---
+
+
+		// ---START---CALLBACK HANDLER (AUTH CODE)
+		if (this.location.href.indexOf("callback?code") > -1) {
+			scrollToAppForm = true;
+			callServerAPIs(); // call the backend server APIs
+		} else if (this.location.href.indexOf("callback") > -1) {
+			scrollToAppForm = true;
+			alert("ERROR:" + JSON.stringify("Missing Auth Code"));
+		}
+		// ---END---CALLBACK HANDLER
+
+
+		// ---START---CALL SERVER API - calling server side APIs (token & person) to get the person data for prefilling form
+		function callServerAPIs() {
+			var authCode = $.url(this.location.href).param('code');
+			// console.log("Auth Code:",authCode);
+			// console.log("State:",state);
+
+			// invoke AJAX call from frontend client side to your backend server side
+			$.ajax({
+				url: "/getPersonData",
+				data: {
+					authCode: authCode,
+					codeVerifier: window.sessionStorage.getItem("codeVerifier")
+				},
+				type: "POST", // post to server side
+				success: function (result) {
+					// console.log("result",result);
+					prefillForm(result);
+				},
+				error: function (result) {
+					alert("ERROR:" + JSON.stringify(result.responseJSON.error));
+				}
+			});
+		}
+		// ---END---CALL SERVER API - calling server side APIs (token & person) to get the person data for prefilling form
+
+
+		// ---START---PREFILL FORM (with MyInfo data)
+		function prefillForm(data) {
+			// prefill form data
+			var noaData = "";
+			var address = "";
+			if (data["noa-basic"]) {
+				noaData = str(data["noa-basic"].amount) ? formatMoney(str(data["noa-basic"].amount), 2, ".", ",") : "";
+			}
+			if (data.regadd.type == "SG") {
+				address = str(data.regadd.country) == "" ? "" :
+					str(data.regadd.block) + " " +
+					str(data.regadd.building) + " \n" +
+					"#" + str(data.regadd.floor) + "-" + str(data.regadd.unit) + " " +
+					str(data.regadd.street) + " \n" +
+					"Singapore " + str(data.regadd.postal)
+			} else if (data.regadd.type == "Unformatted") {
+				address = str(data.regadd.line1) + "\n" +
+					str(data.regadd.line2)
+			}
+			var formValues = {
+				"uinfin": str(data.uinfin),
+				"name": str(data.name),
+				"sex": str(data.sex),
+				"race": str(data.race),
+				"nationality": str(data.nationality),
+				"dob": str(data.dob),
+				"email": str(data.email),
+				"mobileno": str(data.mobileno.prefix) + str(data.mobileno.areacode) + " " + str(data.mobileno.nbr),
+				"regadd": address,
+				"housingtype": str(data.housingtype) == "" ? str(data.hdbtype) : str(data.housingtype),
+				"marital": str(data.marital),
+				"edulevel": str(data.edulevel),
+				"assessableincome": noaData
+			};
+
+			// Populate values
+			populate('#formApplication', formValues);
+		}
+
+		function formatMoney(n, c, d, t) {
+			var c = isNaN(c = Math.abs(c)) ? 2 : c,
+				d = d == undefined ? "." : d,
+				t = t == undefined ? "," : t,
+				s = n < 0 ? "-" : "",
+				i = String(parseInt(n = Math.abs(Number(n) || 0).toFixed(c))),
+				j = (j = i.length) > 3 ? j % 3 : 0;
+
+			return s + (j ? i.substr(0, j) + t : "") + i.substr(j).replace(/(\d{3})(?=\d)/g, "$1" + t) + (c ? d + Math.abs(n -
+				i).toFixed(c).slice(2) : "");
+		}
+
+		function populate(frm, data) {
+			$.each(data, function (key, value) {
+				$('[name=' + key + ']', frm).val(value);
+				$('[name=' + key + ']', frm).prop('disabled', true);
+			});
+		}
+
+		// used to output data items with value or desc
+		function str(data) {
+			if (!data)
+				return null;
+			if (data.value)
+				return data.value;
+			else if (data.desc)
+				return data.desc;
+			else if (typeof data == "string")
+				return data;
+			else
+				return "";
+		}
+		// ---END---PREFILL FORM (with MyInfo data)
+	</script>
+		
+	</head>
+	<body>
+		
+		Index file
+	</body>
+</html>
