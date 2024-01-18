@@ -268,7 +268,6 @@ public class MyInfoSecurityHelper {
 			final JWSSigner signer = new ECDSASigner(privateSigningKey, Curve.P_256);
 			final SignedJWT signedJWT = new SignedJWT(
 					new JWSHeader.Builder(JWSAlgorithm.ES256)
-							.keyID(keyId)
 							.type(JOSEObjectType.JWT).build(),
 							new JWTClaimsSet.Builder()
 							.issuer(clientId)

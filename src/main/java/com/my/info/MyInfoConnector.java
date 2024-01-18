@@ -101,11 +101,7 @@ public class MyInfoConnector {
 	 */
 	private void load(Properties prop) throws MyInfoException {
 
-		if (StringUtil.isEmptyAndNull(prop.getProperty("KEY_ID"))) {
-			throw new MyInfoException("Key id not found or empty in properties file!");
-		} else {
-			this.keyId = prop.getProperty("KEY_ID");
-		}
+
 		if (StringUtil.isEmptyAndNull(prop.getProperty("CLIENT_ID"))) {
 			throw new MyInfoException("Client id not found or empty in properties file!");
 		} else {
